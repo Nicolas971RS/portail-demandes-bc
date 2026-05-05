@@ -508,20 +508,29 @@ async function loadDemandes(tous) {
       const v = currentUser.name.split(' ')[0];
       filter = `&$filter=Vendeur eq '${v}'`;
     }
-    const res = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$select=ID,Title,Client,Vendeur,Date_x0020_Enl_x00e8_vement,Montant_HT,Statut,ID_Devis,N_x00b0_BL&$orderby=Created desc&$top=50${filter}`,
+    const res = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$orderby=Created%20desc&$top=50${filter}`,
       {headers:{'Accept':'application/json','Authorization':'Bearer '+accessToken}});
-    if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.error?.message?.value || `HTTP ${res.status}`); }
+    if (!res.ok) {
+      const errJson = await res.json().catch(()=>({}));
+      const msg = errJson.error?.message?.value || errJson['odata.error']?.message?.value || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
     const data = await res.json();
     const items = data.value ?? data.d?.results ?? [];
+    // Debug : affiche le 1er item dans la console pour voir les noms de champs réels
+    if (items.length > 0) console.log('🔍 Champs du 1er item :', Object.keys(items[0]));
     if (!items.length) { document.getElementById(id).innerHTML='<p style="text-align:center;color:#aaa;padding:32px">Aucune demande.</p>'; return; }
     const badge = s => s==='BC Reçu'?'badge-recu':s==='Litigieux'?'badge-litige':'badge-attente';
+    // Noms internes possibles pour Date et N°BL selon comment la colonne a été créée
+    const getDate = i => i.Date_Enl_x00e8_vement || i.Date_x0020_Enl_x00e8_vement || i.Date_Enlevement || null;
+    const getBL   = i => i.N_x00b0_BL || i.N__x00b0__BL || i.NBL || null;
     const rows = items.map(i => `<tr>
       <td><strong>${i.Title||'—'}</strong></td>
       <td>${i.Client||'—'}</td>
       <td>${i.ID_Devis||'—'}</td>
-      <td>${i['N_x00b0_BL']||'—'}</td>
-      <td>${i.Date_x0020_Enl_x00e8_vement?new Date(i.Date_x0020_Enl_x00e8_vement).toLocaleDateString('fr-FR'):'—'}</td>
-      <td>${i.Montant_HT!=null?i.Montant_HT.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}):'—'}</td>
+      <td>${getBL(i)||'—'}</td>
+      <td>${getDate(i)?new Date(getDate(i)).toLocaleDateString('fr-FR'):'—'}</td>
+      <td>${i.Montant_HT!=null?Number(i.Montant_HT).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}):'—'}</td>
       <td>${i.Vendeur||'—'}</td>
       <td><span class="badge ${badge(i.Statut)}">${i.Statut||'En attente BC'}</span></td>
     </tr>`).join('');
