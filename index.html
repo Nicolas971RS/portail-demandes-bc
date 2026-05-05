@@ -197,8 +197,8 @@
             <select id="field-vendeur">
               <option value="">— Sélectionner —</option>
               <option>Nicolas</option>
-              <option>Marie</option>
-              <option>Jean-Pierre</option>
+              <option>Fritz</option>
+              <option>Fred</option>
               <option>Fabrice</option>
             </select>
           </div>
@@ -462,12 +462,11 @@ async function submitDemande() {
     const body = JSON.stringify({
       __metadata:{type:itemType},
       Title: titre,
-      Client: document.getElementById('field-client').value.trim(),
-      Nom_x0020_Employ_x00e9_: document.getElementById('field-employe').value.trim(),
+      Nom_Employ_x00e9_: document.getElementById('field-employe').value.trim(),
       Email_Client: document.getElementById('field-email').value.trim(),
-      Date_x0020_Enl_x00e8_vement: new Date(document.getElementById('field-date').value).toISOString(),
+      Date_Enl_x00e8_vement: new Date(document.getElementById('field-date').value).toISOString(),
       ID_Devis: document.getElementById('field-devis').value.trim(),
-      N_x00b0__x0020_BL: document.getElementById('field-bl').value.trim(),
+      N_x00b0_BL: document.getElementById('field-bl').value.trim(),
       Montant_HT: parseFloat(document.getElementById('field-montant').value),
       Vendeur: document.getElementById('field-vendeur').value,
       Articles: document.getElementById('field-articles').value.trim(),
@@ -509,7 +508,7 @@ async function loadDemandes(tous) {
       const v = currentUser.name.split(' ')[0];
       filter = `&$filter=Vendeur eq '${v}'`;
     }
-    const res = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$select=ID,Title,Client,Vendeur,Date_x0020_Enl_x00e8_vement,Montant_HT,Statut,ID_Devis,N_x00b0__x0020_BL&$orderby=Created desc&$top=50${filter}`,
+    const res = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$select=ID,Title,Client,Vendeur,Date_x0020_Enl_x00e8_vement,Montant_HT,Statut,ID_Devis,N_x00b0_BL&$orderby=Created desc&$top=50${filter}`,
       {headers:{'Accept':'application/json;odata=verbose','Authorization':'Bearer '+accessToken}});
     const data = await res.json();
     const items = data.d.results;
@@ -519,7 +518,7 @@ async function loadDemandes(tous) {
       <td><strong>${i.Title||'—'}</strong></td>
       <td>${i.Client||'—'}</td>
       <td>${i.ID_Devis||'—'}</td>
-      <td>${i['N_x00b0__x0020_BL']||'—'}</td>
+      <td>${i['N_x00b0_BL']||'—'}</td>
       <td>${i.Date_x0020_Enl_x00e8_vement?new Date(i.Date_x0020_Enl_x00e8_vement).toLocaleDateString('fr-FR'):'—'}</td>
       <td>${i.Montant_HT!=null?i.Montant_HT.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}):'—'}</td>
       <td>${i.Vendeur||'—'}</td>
