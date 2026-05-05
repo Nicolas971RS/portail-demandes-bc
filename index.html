@@ -281,11 +281,69 @@ function base64url(buffer) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)))
     .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
 }
-
 async function generatePKCE() {
   const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   return { verifier, challenge: base64url(digest) };
+}
+
+// ── TOKEN STORE ───────────────────────────────────────────────
+function saveTokens(data) {
+  accessToken = data.access_token;
+  sessionStorage.setItem('sp_token', data.access_token);
+  // expires_at = now + expires_in - 60s de marge
+  const expiresAt = Date.now() + (data.expires_in - 60) * 1000;
+  sessionStorage.setItem('sp_token_expires', expiresAt);
+  if (data.refresh_token) sessionStorage.setItem('sp_refresh', data.refresh_token);
+}
+
+function isTokenExpired() {
+  const exp = sessionStorage.getItem('sp_token_expires');
+  return !exp || Date.now() > parseInt(exp);
+}
+
+// ── REFRESH TOKEN ─────────────────────────────────────────────
+async function refreshAccessToken() {
+  const refreshToken = sessionStorage.getItem('sp_refresh');
+  if (!refreshToken) return false;
+  try {
+    const body = new URLSearchParams({
+      client_id: CLIENT_ID,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      scope: SP_SCOPE + ' openid profile email offline_access',
+    });
+    const res = await fetch(AUTHORITY + '/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body
+    });
+    const data = await res.json();
+    if (data.access_token) { saveTokens(data); return true; }
+  } catch(e) {}
+  return false;
+}
+
+// ── FETCH WRAPPER (gestion 401 auto) ──────────────────────────
+async function fetchSP(url, options = {}, retry = true) {
+  // Refresh proactif si token proche d'expiration
+  if (isTokenExpired()) {
+    const ok = await refreshAccessToken();
+    if (!ok) { login(); return null; }
+  }
+  options.headers = options.headers || {};
+  options.headers['Authorization'] = 'Bearer ' + accessToken;
+
+  const res = await fetch(url, options);
+
+  // 401 → tente un refresh puis relance une fois
+  if (res.status === 401 && retry) {
+    const ok = await refreshAccessToken();
+    if (ok) return fetchSP(url, options, false);
+    login(); // refresh échoué → re-login complet
+    return null;
+  }
+  return res;
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────
@@ -294,7 +352,6 @@ async function login() {
   sessionStorage.setItem('pkce_verifier', pkce.verifier);
   const state = base64url(crypto.getRandomValues(new Uint8Array(8)));
   sessionStorage.setItem('oauth_state', state);
-
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     response_type: 'code',
@@ -314,7 +371,6 @@ async function handleCallback() {
   const state = params.get('state');
   if (!code) return false;
   if (state !== sessionStorage.getItem('oauth_state')) { alert('Erreur sécurité'); return false; }
-
   const verifier = sessionStorage.getItem('pkce_verifier');
   const body = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -322,9 +378,8 @@ async function handleCallback() {
     code,
     redirect_uri: REDIRECT_URI,
     code_verifier: verifier,
-    scope: SP_SCOPE + ' openid profile email',
+    scope: SP_SCOPE + ' openid profile email offline_access',
   });
-
   const res = await fetch(AUTHORITY + '/oauth2/v2.0/token', {
     method: 'POST',
     headers: {'Content-Type':'application/x-www-form-urlencoded'},
@@ -332,13 +387,11 @@ async function handleCallback() {
   });
   const data = await res.json();
   if (data.access_token) {
-    accessToken = data.access_token;
-    // Decode JWT to get user info
+    saveTokens(data);
     try {
       const payload = JSON.parse(atob(data.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
       currentUser = { name: payload.name || payload.preferred_username, email: payload.preferred_username };
     } catch(e) { currentUser = { name: 'Utilisateur', email: '' }; }
-    sessionStorage.setItem('sp_token', accessToken);
     sessionStorage.setItem('user_info', JSON.stringify(currentUser));
     history.replaceState({}, '', REDIRECT_URI);
     return true;
@@ -350,17 +403,20 @@ async function handleCallback() {
 window.onload = async () => {
   document.getElementById('field-date').value = new Date().toISOString().split('T')[0];
 
-  // Check session storage first
   const storedToken = sessionStorage.getItem('sp_token');
-  const storedUser = sessionStorage.getItem('user_info');
+  const storedUser  = sessionStorage.getItem('user_info');
   if (storedToken && storedUser) {
-    accessToken = storedToken;
-    currentUser = JSON.parse(storedUser);
+    accessToken  = storedToken;
+    currentUser  = JSON.parse(storedUser);
+    // Refresh proactif si déjà expiré
+    if (isTokenExpired()) {
+      const ok = await refreshAccessToken();
+      if (!ok) { return; } // reste sur login screen
+    }
     showApp();
     return;
   }
 
-  // Handle OAuth callback
   if (window.location.search.includes('code=')) {
     const ok = await handleCallback();
     if (ok) { showApp(); return; }
@@ -442,16 +498,17 @@ async function submitDemande() {
   clearAlert();
   try {
     // Get form digest
-    const dRes = await fetch(SITE_URL + '/_api/contextinfo', {
-      method:'POST', headers:{'Accept':'application/json;odata=verbose','Authorization':'Bearer '+accessToken,'Content-Length':'0'}
+    const dRes = await fetchSP(SITE_URL + '/_api/contextinfo', {
+      method:'POST', headers:{'Accept':'application/json;odata=verbose','Content-Length':'0'}
     });
+    if (!dRes) return;
     const dData = await dRes.json();
     const digest = dData.d.GetContextWebInformation.FormDigestValue;
-    const h = {'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose','Authorization':'Bearer '+accessToken,'X-RequestDigest':digest};
+    const h = {'Accept':'application/json;odata=verbose','Content-Type':'application/json;odata=verbose','X-RequestDigest':digest};
 
     // Get list item type
-    const tRes = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')?$select=ListItemEntityTypeFullName`, {headers:h});
-    const tData = await tRes.json();
+    const tRes = await fetchSP(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')?$select=ListItemEntityTypeFullName`, {headers:h});
+    if (!tRes) return;
     const itemType = tData.d.ListItemEntityTypeFullName;
 
     // Build title
@@ -474,7 +531,8 @@ async function submitDemande() {
       Statut: 'En attente BC',
     });
 
-    const cRes = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items`, {method:'POST',headers:h,body});
+    const cRes = await fetchSP(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items`, {method:'POST',headers:h,body});
+    if (!cRes) return;
     if (!cRes.ok) throw new Error('Erreur création: ' + cRes.status + ' - ' + await cRes.text());
     const cData = await cRes.json();
     const itemId = cData.d.ID;
@@ -482,8 +540,8 @@ async function submitDemande() {
     // Upload attachment
     if (selectedFile) {
       const ab = await selectedFile.arrayBuffer();
-      await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items(${itemId})/AttachmentFiles/add(FileName='${encodeURIComponent(selectedFile.name)}')`, {
-        method:'POST', headers:{'Authorization':'Bearer '+accessToken,'X-RequestDigest':digest}, body:ab
+      await fetchSP(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items(${itemId})/AttachmentFiles/add(FileName='${encodeURIComponent(selectedFile.name)}')`, {
+        method:'POST', headers:{'X-RequestDigest':digest}, body:ab
       });
     }
 
@@ -508,29 +566,24 @@ async function loadDemandes(tous) {
       const v = currentUser.name.split(' ')[0];
       filter = `&$filter=Vendeur eq '${v}'`;
     }
-    const res = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$orderby=Created%20desc&$top=50${filter}`,
-      {headers:{'Accept':'application/json','Authorization':'Bearer '+accessToken}});
+    const res = await fetchSP(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$orderby=Created%20desc&$top=50${filter}`,
+      {headers:{'Accept':'application/json'}});
+    if (!res) return;
     if (!res.ok) {
-      const errJson = await res.json().catch(()=>({}));
-      const msg = errJson.error?.message?.value || errJson['odata.error']?.message?.value || `HTTP ${res.status}`;
-      throw new Error(msg);
+      const err = await res.json().catch(()=>({}));
+      throw new Error(err.error?.message?.value || `HTTP ${res.status}`);
     }
     const data = await res.json();
     const items = data.value ?? data.d?.results ?? [];
-    // Debug : affiche le 1er item dans la console pour voir les noms de champs réels
-    if (items.length > 0) console.log('🔍 Champs du 1er item :', Object.keys(items[0]));
     if (!items.length) { document.getElementById(id).innerHTML='<p style="text-align:center;color:#aaa;padding:32px">Aucune demande.</p>'; return; }
     const badge = s => s==='BC Reçu'?'badge-recu':s==='Litigieux'?'badge-litige':'badge-attente';
-    // Noms internes possibles pour Date et N°BL selon comment la colonne a été créée
-    const getDate = i => i.Date_Enl_x00e8_vement || i.Date_x0020_Enl_x00e8_vement || i.Date_Enlevement || null;
-    const getBL   = i => i.N_x00b0_BL || i.N__x00b0__BL || i.NBL || null;
     const rows = items.map(i => `<tr>
       <td><strong>${i.Title||'—'}</strong></td>
       <td>${i.Client||'—'}</td>
       <td>${i.ID_Devis||'—'}</td>
-      <td>${getBL(i)||'—'}</td>
-      <td>${getDate(i)?new Date(getDate(i)).toLocaleDateString('fr-FR'):'—'}</td>
-      <td>${i.Montant_HT!=null?Number(i.Montant_HT).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}):'—'}</td>
+      <td>${i['N_x00b0_BL']||'—'}</td>
+      <td>${i.Date_x0020_Enl_x00e8_vement?new Date(i.Date_x0020_Enl_x00e8_vement).toLocaleDateString('fr-FR'):'—'}</td>
+      <td>${i.Montant_HT!=null?i.Montant_HT.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}):'—'}</td>
       <td>${i.Vendeur||'—'}</td>
       <td><span class="badge ${badge(i.Statut)}">${i.Statut||'En attente BC'}</span></td>
     </tr>`).join('');
