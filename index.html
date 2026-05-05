@@ -414,9 +414,15 @@ async function handleCallback() {
       sessionStorage.setItem('user_info', JSON.stringify(currentUser));
       return true;
     }
-    console.warn('Token exchange failed:', data.error_description || data.error);
+    // Affiche l'erreur Microsoft directement sur l'écran login
+    const errMsg = data.error_description || data.error || 'Erreur inconnue';
+    console.error('Token exchange failed:', data);
+    document.querySelector('.login-card p').innerHTML =
+      '<span style="color:#e74c3c;font-size:.82rem">⚠️ Erreur : ' + errMsg + '</span>';
   } catch(e) {
     console.error('handleCallback error:', e);
+    document.querySelector('.login-card p').innerHTML =
+      '<span style="color:#e74c3c;font-size:.82rem">⚠️ Erreur technique : ' + e.message + '</span>';
   }
   return false;
 }
