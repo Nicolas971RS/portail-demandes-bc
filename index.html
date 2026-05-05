@@ -167,6 +167,10 @@
             <input type="text" id="field-employe" placeholder="Prénom Nom de l'employé"/>
           </div>
           <div class="form-group">
+            <label>Chef de chantier</label>
+            <input type="text" id="field-chantier" placeholder="Prénom Nom du chef de chantier"/>
+          </div>
+          <div class="form-group">
             <label>Email client <span class="required">*</span></label>
             <input type="email" id="field-email" placeholder="contact@client.com"/>
           </div>
@@ -520,6 +524,7 @@ async function submitDemande() {
       __metadata:{type:itemType},
       Title: titre,
       Nom_Employ_x00e9_: document.getElementById('field-employe').value.trim(),
+      Chefdechantier: document.getElementById('field-chantier').value.trim(),
       Email_Client: document.getElementById('field-email').value.trim(),
       Date_Enl_x00e8_vement: new Date(document.getElementById('field-date').value).toISOString(),
       ID_Devis: document.getElementById('field-devis').value.trim(),
@@ -580,6 +585,8 @@ async function loadDemandes(tous) {
     const rows = items.map(i => `<tr>
       <td><strong>${i.Title||'—'}</strong></td>
       <td>${i.Client||'—'}</td>
+      <td>${i.Nom_Employ_x00e9_||'—'}</td>
+      <td>${i.Chefdechantier||'—'}</td>
       <td>${i.ID_Devis||'—'}</td>
       <td>${i['N_x00b0_BL']||'—'}</td>
       <td>${i.Date_x0020_Enl_x00e8_vement?new Date(i.Date_x0020_Enl_x00e8_vement).toLocaleDateString('fr-FR'):'—'}</td>
@@ -587,14 +594,14 @@ async function loadDemandes(tous) {
       <td>${i.Vendeur||'—'}</td>
       <td><span class="badge ${badge(i.Statut)}">${i.Statut||'En attente BC'}</span></td>
     </tr>`).join('');
-    document.getElementById(id).innerHTML = `<div style="overflow-x:auto"><table class="demandes-table"><thead><tr><th>Référence</th><th>Client</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    document.getElementById(id).innerHTML = `<div style="overflow-x:auto"><table class="demandes-table"><thead><tr><th>Référence</th><th>Client</th><th>Employé</th><th>Chef chantier</th><th>N° Devis</th><th>N° BL</th><th>Date enlèv.</th><th>Montant HT</th><th>Vendeur</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   } catch(e) { document.getElementById(id).innerHTML=`<div class="alert alert-error">Erreur : ${e.message}</div>`; }
 }
 
 function showAlert(m,t='info') { document.getElementById('form-alert').innerHTML=`<div class="alert alert-${t}">${m}</div>`; window.scrollTo({top:0,behavior:'smooth'}); }
 function clearAlert() { document.getElementById('form-alert').innerHTML=''; }
 function resetForm() {
-  ['field-client','field-employe','field-email','field-devis','field-bl','field-articles','field-notes'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('error')});
+  ['field-client','field-employe','field-chantier','field-email','field-devis','field-bl','field-articles','field-notes'].forEach(id=>{document.getElementById(id).value='';document.getElementById(id).classList.remove('error')});
   document.getElementById('field-montant').value='';
   document.getElementById('field-date').value=new Date().toISOString().split('T')[0];
   removeFile(); clearAlert();
