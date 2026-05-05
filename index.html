@@ -509,9 +509,10 @@ async function loadDemandes(tous) {
       filter = `&$filter=Vendeur eq '${v}'`;
     }
     const res = await fetch(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')/items?$select=ID,Title,Client,Vendeur,Date_x0020_Enl_x00e8_vement,Montant_HT,Statut,ID_Devis,N_x00b0_BL&$orderby=Created desc&$top=50${filter}`,
-      {headers:{'Accept':'application/json;odata=verbose','Authorization':'Bearer '+accessToken}});
+      {headers:{'Accept':'application/json','Authorization':'Bearer '+accessToken}});
+    if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.error?.message?.value || `HTTP ${res.status}`); }
     const data = await res.json();
-    const items = data.d.results;
+    const items = data.value ?? data.d?.results ?? [];
     if (!items.length) { document.getElementById(id).innerHTML='<p style="text-align:center;color:#aaa;padding:32px">Aucune demande.</p>'; return; }
     const badge = s => s==='BC Reçu'?'badge-recu':s==='Litigieux'?'badge-litige':'badge-attente';
     const rows = items.map(i => `<tr>
