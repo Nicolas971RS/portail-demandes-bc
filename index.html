@@ -537,6 +537,7 @@ async function submitDemande() {
     // Get list item type
     const tRes = await fetchSP(SITE_URL + `/_api/web/lists/getbytitle('${LIST_NAME}')?$select=ListItemEntityTypeFullName`, {headers:h});
     if (!tRes) return;
+    const tData = await tRes.json();
     const itemType = tData.d.ListItemEntityTypeFullName;
 
     // Build title
