@@ -548,6 +548,7 @@ async function submitDemande() {
     const body = JSON.stringify({
       __metadata:{type:itemType},
       Title: titre,
+      NomClient: document.getElementById('field-client').value.trim(),
       Nom_Employ_x00e9_: document.getElementById('field-employe').value.trim(),
       Chefdechantier: document.getElementById('field-chantier').value.trim(),
       Email_Client: document.getElementById('field-email').value.trim(),
@@ -609,7 +610,7 @@ async function loadDemandes(tous) {
     const badge = s => s==='BC Reçu'?'badge-recu':s==='Litigieux'?'badge-litige':'badge-attente';
     const rows = items.map(i => `<tr>
       <td><strong>${i.Title||'—'}</strong></td>
-      <td>${i.Client||'—'}</td>
+      <td>${i.NomClient||'—'}</td>
       <td>${i.Nom_Employ_x00e9_||'—'}</td>
       <td>${i.Chefdechantier||'—'}</td>
       <td>${i.ID_Devis||'—'}</td>
