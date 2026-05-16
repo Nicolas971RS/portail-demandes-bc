@@ -325,7 +325,7 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
                   <option value="Nicolas">Nicolas</option>
                   <option value="Fred">Fred</option>
                   <option value="Fritz">Fritz</option>
-		  <option value="Fabrice">Fabrice</option>
+                  <option value="Fabrice">Fabrice</option>
                 </select>
               </div>
             </div>
@@ -474,10 +474,11 @@ const CLIENT_ID   = "65b27695-da23-4e18-83a7-8b5678205d12";
 const TENANT_ID   = "d441528b-bc77-4636-8d24-8ac9d38aed63";
 const REDIRECT    = "https://nicolas971rs.github.io/portail-demandes-bc/";
 const SP_SITE     = "https://reseauxplus971.sharepoint.com/sites/BondeCommande";
-const SP_SCOPE    = `${SP_SITE}/.default`;
+// Scope SharePoint — si erreur AADSTS: vérifier les API permissions de l'app Azure AD
+const SP_SCOPE    = `${SP_SITE}/AllSites.Write`;
 
 // Mapping prénom compte → valeur Choix SharePoint
-const VENDEUR_MAP = { nicolas:"Nicolas", fred:"Fred", frédéric:"Fred", frederic:"Fred", fabrice:"Fabrice" };
+const VENDEUR_MAP = { nicolas:"Nicolas", fred:"Fred", frédéric:"Fred", frederic:"Fred", fritz:"Fritz", fabrice:"Fabrice" };
 
 /* ═══════════════════════════════════════════════
    MSAL
@@ -508,7 +509,9 @@ async function boot() {
     onReady();
   } catch(e) {
     console.error(e);
-    document.getElementById('login-error').textContent = "Erreur d'authentification. Réessayez.";
+    // Affiche l'erreur réelle pour faciliter le diagnostic
+    const msg = e.errorCode ? `[${e.errorCode}] ${e.message}` : e.message;
+    document.getElementById('login-error').textContent = msg;
   }
 }
 
