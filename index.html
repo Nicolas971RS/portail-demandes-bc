@@ -353,17 +353,37 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
             </div>
           </div>
 
-          <!-- DOCUMENT -->
+          <!-- DOCUMENTS -->
           <div class="card">
-            <div class="card-title">📎 Bon de livraison signé</div>
-            <div class="upload-zone" id="upload-zone"
-              ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragleave="onDragLeave(event)">
-              <input type="file" id="f-file" accept=".pdf,.jpg,.jpeg,.png"
-                onchange="onFileChange(event)">
-              <div id="upload-inner">
-                <div class="upload-icon">📄</div>
-                <div class="upload-text-main">Glisser-déposer ou <strong>cliquer pour parcourir</strong></div>
-                <div class="upload-text-sub">PDF · JPG · PNG acceptés<span class="req"> *</span></div>
+            <div class="card-title">📎 Documents joints</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <!-- BL signé -->
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#4a5568;display:block;margin-bottom:5px">BL signé<span class="req">*</span></label>
+                <div class="upload-zone" id="upload-zone-bl"
+                  ondragover="onDragOver(event,'upload-zone-bl')" ondrop="onDrop(event,'f-file-bl','upload-zone-bl','upload-inner-bl')" ondragleave="onDragLeave('upload-zone-bl')">
+                  <input type="file" id="f-file-bl" accept=".pdf,.jpg,.jpeg,.png"
+                    onchange="onFileChange(event,'upload-inner-bl')">
+                  <div id="upload-inner-bl">
+                    <div class="upload-icon">📄</div>
+                    <div class="upload-text-main" style="font-size:12px">Glisser ou <strong>parcourir</strong></div>
+                    <div class="upload-text-sub">PDF · JPG · PNG</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Devis -->
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#4a5568;display:block;margin-bottom:5px">Devis joint</label>
+                <div class="upload-zone" id="upload-zone-dv"
+                  ondragover="onDragOver(event,'upload-zone-dv')" ondrop="onDrop(event,'f-file-dv','upload-zone-dv','upload-inner-dv')" ondragleave="onDragLeave('upload-zone-dv')">
+                  <input type="file" id="f-file-dv" accept=".pdf,.jpg,.jpeg,.png"
+                    onchange="onFileChange(event,'upload-inner-dv')">
+                  <div id="upload-inner-dv">
+                    <div class="upload-icon">📋</div>
+                    <div class="upload-text-main" style="font-size:12px">Glisser ou <strong>parcourir</strong></div>
+                    <div class="upload-text-sub">PDF · JPG · PNG</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -620,17 +640,34 @@ function onClientInput(val) {
 }
 
 async function doSearch(q) {
+  const sugg = document.getElementById('client-suggestions');
   try {
     const enc = encodeURIComponent(q);
-    // Try startswith on Title first
-    const d = await spGet(
-      `web/lists/getbytitle('Base_Clients')/items?$filter=startswith(Title,'${enc}')&$select=Title,Email,Telephone,Adresse,Ville,Code_Client&$top=12&$orderby=Title`
-    );
+    // Requête principale : startswith sur Title
+    let d;
+    try {
+      d = await spGet(
+        `web/lists/getbytitle('Base_Clients')/items?$filter=startswith(Title,'${enc}')&$select=Title,Email,Telephone,Adresse,Ville,Code_Client&$top=12&$orderby=Title`
+      );
+    } catch(e1) {
+      // Fallback : sans $filter ni $select — pour diagnostiquer si la liste existe
+      console.warn('Base_Clients startswith failed, trying raw fetch:', e1.message);
+      d = await spGet(`web/lists/getbytitle('Base_Clients')/items?$top=5`);
+      // Si on arrive ici, la liste existe mais les colonnes diffèrent — afficher les noms internes
+      const cols = d.d.results.length ? Object.keys(d.d.results[0]).filter(k=>!k.startsWith('odata')).join(', ') : 'liste vide';
+      sugg.innerHTML = `<div class="cs-loading" style="color:#b97a00;text-align:left;padding:10px">
+        ⚠️ Colonnes détectées dans Base_Clients :<br><code style="font-size:10px">${cols}</code><br>
+        <span style="font-size:10px;color:#888">Communiquer ces noms à Claude pour ajuster la requête</span>
+      </div>`;
+      return;
+    }
     renderSugg(d.d.results);
   } catch(e) {
-    console.error(e);
-    document.getElementById('client-suggestions').innerHTML =
-      '<div class="cs-loading" style="color:#e53935">Erreur de recherche — vérifier les colonnes Base_Clients</div>';
+    console.error('Base_Clients error:', e);
+    const msg = e.message || String(e);
+    sugg.innerHTML = `<div class="cs-loading" style="color:#e53935;text-align:left;padding:10px">
+      ❌ ${msg.includes('does not exist') ? "Liste 'Base_Clients' introuvable — vérifier le nom exact dans SharePoint" : 'Erreur : ' + msg}
+    </div>`;
   }
 }
 
@@ -761,21 +798,21 @@ function livePreview() {
 /* ═══════════════════════════════════════════════
    FILE UPLOAD
 ═══════════════════════════════════════════════ */
-function onFileChange(e) {
+function onFileChange(e, innerId) {
   const f = e.target.files[0];
-  if (f) showFile(f.name);
+  if (f) showFile(f.name, innerId);
 }
-function onDragOver(e)  { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
-function onDragLeave()  { document.getElementById('upload-zone').classList.remove('drag-over'); }
-function onDrop(e) {
+function onDragOver(e, zoneId)  { e.preventDefault(); document.getElementById(zoneId).classList.add('drag-over'); }
+function onDragLeave(zoneId)    { document.getElementById(zoneId).classList.remove('drag-over'); }
+function onDrop(e, inputId, zoneId, innerId) {
   e.preventDefault();
-  document.getElementById('upload-zone').classList.remove('drag-over');
+  document.getElementById(zoneId).classList.remove('drag-over');
   const f = e.dataTransfer.files[0];
-  if (f) { document.getElementById('f-file').files = e.dataTransfer.files; showFile(f.name); }
+  if (f) { document.getElementById(inputId).files = e.dataTransfer.files; showFile(f.name, innerId); }
 }
-function showFile(name) {
-  document.getElementById('upload-inner').innerHTML =
-    `<div class="upload-icon">✅</div><div class="upload-file-ok">${name}</div><div class="upload-text-sub" style="margin-top:4px">Cliquer pour remplacer</div>`;
+function showFile(name, innerId) {
+  document.getElementById(innerId).innerHTML =
+    `<div class="upload-icon">✅</div><div class="upload-file-ok" style="font-size:12px">${name}</div><div class="upload-text-sub" style="margin-top:3px">Cliquer pour remplacer</div>`;
 }
 
 /* ═══════════════════════════════════════════════
@@ -804,7 +841,7 @@ async function creerDemande() {
   const mnt = parseFloat(document.getElementById('f-montant').value);
   if (!mnt || mnt <= 0)                                   errs.push("Montant HT invalide");
   if (!document.getElementById('f-email').value.trim())   errs.push("Email client manquant");
-  if (!document.getElementById('f-file').files[0])        errs.push("BL signé manquant");
+  if (!document.getElementById('f-file-bl').files[0])      errs.push("BL signé manquant");
 
   if (errs.length) { showAlert('error', '⚠️ ' + errs.join(' · ')); return; }
 
@@ -838,10 +875,17 @@ async function creerDemande() {
     const res    = await spPost(`web/lists/getbytitle('Demandes_BC')/items`, body);
     const itemId = res.d.Id;
 
-    // Attach file
-    const file = document.getElementById('f-file').files[0];
-    const buf  = await file.arrayBuffer();
-    await spAttach('Demandes_BC', itemId, file.name, buf);
+    // Attach BL signé (obligatoire)
+    const fileBL = document.getElementById('f-file-bl').files[0];
+    const bufBL  = await fileBL.arrayBuffer();
+    await spAttach('Demandes_BC', itemId, fileBL.name, bufBL);
+
+    // Attach Devis (optionnel)
+    const fileDV = document.getElementById('f-file-dv').files[0];
+    if (fileDV) {
+      const bufDV = await fileDV.arrayBuffer();
+      await spAttach('Demandes_BC', itemId, fileDV.name, bufDV);
+    }
 
     showAlert('success',
       `✅ Demande <strong>${title}</strong> créée (ID ${itemId}). Power Automate enverra l'email à <strong>${document.getElementById('f-email').value.trim()}</strong>.`
@@ -882,11 +926,12 @@ function resetForm() {
   ['f-employe','f-chef','f-devis','f-bl-num','f-montant','f-email','f-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
-  document.getElementById('f-file').value = '';
-  document.getElementById('upload-inner').innerHTML =
-    `<div class="upload-icon">📄</div>
-     <div class="upload-text-main">Glisser-déposer ou <strong>cliquer pour parcourir</strong></div>
-     <div class="upload-text-sub">PDF · JPG · PNG acceptés<span class="req"> *</span></div>`;
+  document.getElementById('f-file-bl').value = '';
+  document.getElementById('f-file-dv').value = '';
+  document.getElementById('upload-inner-bl').innerHTML =
+    `<div class="upload-icon">📄</div><div class="upload-text-main" style="font-size:12px">Glisser ou <strong>parcourir</strong></div><div class="upload-text-sub">PDF · JPG · PNG</div>`;
+  document.getElementById('upload-inner-dv').innerHTML =
+    `<div class="upload-icon">📋</div><div class="upload-text-main" style="font-size:12px">Glisser ou <strong>parcourir</strong></div><div class="upload-text-sub">PDF · JPG · PNG</div>`;
   const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   document.getElementById('f-date').value = now.toISOString().slice(0,16);
   resetClient();
@@ -921,7 +966,7 @@ async function loadHistorique() {
   document.getElementById('tbl-historique').innerHTML = '<div class="no-data">Chargement…</div>';
   try {
     const d = await spGet(
-      `web/lists/getbytitle('Demandes_BC')/items?$select=Title,NomClient,Vendeur,Date_Enl_x00e8_vement,Montant_HT,ID_Devis,Statut&$orderby=Created desc&$top=200`
+      `web/lists/getbytitle('Demandes_BC')/items?$select=Title,NomClient,Vendeur,Date_Enl_x00e8_vement,Montant_HT,ID_Devis,N_x00b0_BL,Statut&$orderby=Created desc&$top=200`
     );
     renderTable('tbl-historique', d.d.results, false);
   } catch(e) {
@@ -952,13 +997,13 @@ function renderTable(containerId, items, showRelances) {
       ${showRelances
         ? `<td>${it.Email_Client||'—'}</td>
            <td><span class="sbadge ${relCls}">${rel}</span></td>`
-        : `<td><span class="sbadge ${sc}">${st}</span></td>`
+        : `<td>${it['N_x00b0_BL']||'—'}</td><td><span class="sbadge ${sc}">${st}</span></td>`
       }
     </tr>`;
   }).join('');
   const thead = showRelances
     ? `<tr><th>Référence</th><th>Client</th><th>Vendeur</th><th>Date enlèvement</th><th style="text-align:right">Montant HT</th><th>N° Devis</th><th>Email</th><th>Relances</th></tr>`
-    : `<tr><th>Référence</th><th>Client</th><th>Vendeur</th><th>Date enlèvement</th><th style="text-align:right">Montant HT</th><th>N° Devis</th><th>Statut</th></tr>`;
+    : `<tr><th>Référence</th><th>Client</th><th>Vendeur</th><th>Date enlèvement</th><th style="text-align:right">Montant HT</th><th>N° Devis</th><th>N° BL</th><th>Statut</th></tr>`;
   document.getElementById(containerId).innerHTML =
     `<table class="data-table"><thead>${thead}</thead><tbody>${rows}</tbody></table>`;
 }
