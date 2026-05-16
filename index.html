@@ -809,8 +809,18 @@ async function creerDemande() {
       "Nb_Relances":            0
     };
 
-    const res    = await spPost(`web/lists/getbytitle('Demandes_BC')/items`, body);
-    const itemId = res.d ? res.d.Id : res.Id; // nometadata = res.Id, verbose = res.d.Id
+    // POST pour créer l'item (on ignore la réponse — SharePoint peut renvoyer HTML)
+    try { await spPost(`web/lists/getbytitle('Demandes_BC')/items`, body); }
+    catch(ePost) {
+      // SharePoint retourne parfois HTML sur 201 malgré Prefer header — continuer si l'item existe
+      if (!ePost.message.includes("token") && !ePost.message.includes("JSON") && !ePost.message.includes("<")) throw ePost;
+      console.warn('POST réponse non-JSON (item probablement créé) :', ePost.message);
+    }
+    // Récupérer l'ID via GET filtré sur le titre qu'on vient de créer
+    const enc  = encodeURIComponent(title);
+    const getR = await spGet(`web/lists/getbytitle('Demandes_BC')/items?\=Title eq '${enc}'&\=Id&\=Id desc&\=1`);
+    const itemId = getR.d?.results?.[0]?.Id ?? getR.value?.[0]?.Id ?? null;
+    if (!itemId) throw new Error("Item créé mais ID introuvable — vérifier SharePoint");
 
     // Attach BL signé (obligatoire)
     const fileBL = document.getElementById('f-file-bl').files[0];
