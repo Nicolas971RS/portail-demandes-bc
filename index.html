@@ -280,20 +280,15 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
           <!-- CLIENT -->
           <div class="card">
             <div class="card-title">📍 Client</div>
-            <div class="client-search-area" id="client-search-area">
+            <div class="form-row col2">
               <div class="form-group">
-                <label>Recherche client<span class="req">*</span></label>
-                <input type="text" id="client-input"
-                  placeholder="Saisir min. 2 caractères..."
-                  autocomplete="off"
-                  oninput="onClientInput(this.value)">
-                <div class="search-hint" id="search-hint">Recherche sur la liste Base_Clients</div>
+                <label>Nom du client<span class="req">*</span></label>
+                <input type="text" id="f-client-nom" placeholder="Raison sociale" autocomplete="off"
+                  oninput="onClientNomChange(this.value)">
               </div>
-              <div class="client-suggestions" id="client-suggestions"></div>
-              <div class="client-selected-chip" id="client-chip">
-                <button class="btn-change" onclick="resetClient()">✕ Changer</button>
-                <div class="chip-name" id="chip-name">—</div>
-                <div class="chip-detail" id="chip-detail">—</div>
+              <div class="form-group">
+                <label>Email client<span class="req">*</span></label>
+                <input type="email" id="f-email" placeholder="contact@client.com">
               </div>
             </div>
           </div>
@@ -341,14 +336,10 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
               </div>
             </div>
 
-            <div class="form-row col2">
+            <div class="form-row col1">
               <div class="form-group">
                 <label>Montant HT (€)<span class="req">*</span></label>
                 <input type="number" id="f-montant" placeholder="0.00" step="0.01" min="0" oninput="livePreview()">
-              </div>
-              <div class="form-group">
-                <label>Email client<span class="req">*</span></label>
-                <input type="email" id="f-email" placeholder="contact@client.com" class="prefilled">
               </div>
             </div>
           </div>
@@ -411,8 +402,8 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
 
           <!-- Fiche client -->
           <div class="card">
-            <div class="card-title">👤 Fiche client</div>
-            <div id="r-client"><div class="no-client-msg">Sélectionnez un client</div></div>
+            <div class="card-title">👤 Client sélectionné</div>
+            <div id="r-client"><div class="no-client-msg">Saisir le nom du client</div></div>
           </div>
 
           <!-- Historique -->
@@ -629,95 +620,25 @@ async function spAttach(list, itemId, fileName, data) {
 }
 
 /* ═══════════════════════════════════════════════
-   CLIENT SEARCH
+   CLIENT — SAISIE MANUELLE
 ═══════════════════════════════════════════════ */
-function onClientInput(val) {
-  clearTimeout(searchTimer);
-  if (val.length < 2) { closeSugg(); return; }
-  document.getElementById('client-suggestions').style.display = 'block';
-  document.getElementById('client-suggestions').innerHTML = '<div class="cs-loading">Recherche…</div>';
-  searchTimer = setTimeout(() => doSearch(val), 320);
-}
-
-async function doSearch(q) {
-  const sugg = document.getElementById('client-suggestions');
-  try {
-    const enc = encodeURIComponent(q);
-    // Requête principale : startswith sur Title
-    let d;
-    try {
-      d = await spGet(
-        `web/lists/getbytitle('Base_Clients')/items?$filter=startswith(Title,'${enc}')&$select=Title,Email,Telephone,Adresse,Ville,Code_Client&$top=12&$orderby=Title`
-      );
-    } catch(e1) {
-      // Fallback : sans $filter ni $select — pour diagnostiquer si la liste existe
-      console.warn('Base_Clients startswith failed, trying raw fetch:', e1.message);
-      d = await spGet(`web/lists/getbytitle('Base_Clients')/items?$top=5`);
-      // Si on arrive ici, la liste existe mais les colonnes diffèrent — afficher les noms internes
-      const cols = d.d.results.length ? Object.keys(d.d.results[0]).filter(k=>!k.startsWith('odata')).join(', ') : 'liste vide';
-      sugg.innerHTML = `<div class="cs-loading" style="color:#b97a00;text-align:left;padding:10px">
-        ⚠️ Colonnes détectées dans Base_Clients :<br><code style="font-size:10px">${cols}</code><br>
-        <span style="font-size:10px;color:#888">Communiquer ces noms à Claude pour ajuster la requête</span>
-      </div>`;
-      return;
-    }
-    renderSugg(d.d.results);
-  } catch(e) {
-    console.error('Base_Clients error:', e);
-    const msg = e.message || String(e);
-    sugg.innerHTML = `<div class="cs-loading" style="color:#e53935;text-align:left;padding:10px">
-      ❌ ${msg.includes('does not exist') ? "Liste 'Base_Clients' introuvable — vérifier le nom exact dans SharePoint" : 'Erreur : ' + msg}
-    </div>`;
+function onClientNomChange(val) {
+  selClient = val.trim() ? { Title: val.trim() } : null;
+  // Panneau droit : mini récap
+  const el = document.getElementById('r-client');
+  if (val.trim()) {
+    el.innerHTML = `<div class="info-row"><span class="info-lbl">Nom</span><span class="info-val"><strong>${val.trim()}</strong></span></div>
+      <div class="info-row"><span class="info-lbl">Email</span><span class="info-val">${document.getElementById('f-email').value||'—'}</span></div>`;
+    loadClientHistory(val.trim());
+  } else {
+    el.innerHTML = '<div class="no-client-msg">Saisir le nom du client</div>';
+    document.getElementById('r-history').innerHTML = '<div class="no-client-msg">—</div>';
   }
 }
 
-function renderSugg(items) {
-  const el = document.getElementById('client-suggestions');
-  if (!items.length) { el.innerHTML = '<div class="cs-loading">Aucun résultat</div>'; return; }
-  el.innerHTML = items.map(c => {
-    const sub = [c.Email, c.Telephone, c.Ville].filter(Boolean).join(' · ');
-    const safe = JSON.stringify(c).replace(/'/g,"&#39;").replace(/"/g,"&quot;");
-    return `<div class="cs-item" onclick='pickClient(${JSON.stringify(c)})'>
-      <div class="cs-item-name">${c.Title}</div>
-      ${sub ? `<div class="cs-item-sub">${sub}</div>` : ''}
-    </div>`;
-  }).join('');
-}
+function onClientInput(val) { /* obsolète — conservé pour compatibilité */ }
 
-function pickClient(c) {
-  selClient = c;
-  closeSugg();
-  document.getElementById('client-input').style.display = 'none';
-  document.getElementById('search-hint').style.display = 'none';
-  const chip = document.getElementById('client-chip');
-  chip.style.display = 'block';
-  document.getElementById('chip-name').textContent = c.Title;
-  const detail = [c.Email, c.Telephone, c.Ville].filter(Boolean).join(' · ');
-  document.getElementById('chip-detail').textContent = detail || '—';
-  if (c.Email) document.getElementById('f-email').value = c.Email;
-  renderClientCard(c);
-  loadClientHistory(c.Title);
-}
-
-function resetClient() {
-  selClient = null;
-  document.getElementById('client-input').style.display = '';
-  document.getElementById('client-input').value = '';
-  document.getElementById('search-hint').style.display = '';
-  document.getElementById('client-chip').style.display = 'none';
-  document.getElementById('r-client').innerHTML = '<div class="no-client-msg">Sélectionnez un client</div>';
-  document.getElementById('r-history').innerHTML = '<div class="no-client-msg">—</div>';
-  document.getElementById('f-email').value = '';
-}
-
-function closeSugg() {
-  document.getElementById('client-suggestions').style.display = 'none';
-}
-
-document.addEventListener('click', e => {
-  if (!document.getElementById('client-search-area')?.contains(e.target)) closeSugg();
-});
-
+/* fonctions search obsolètes — supprimées */
 /* ═══════════════════════════════════════════════
    RIGHT PANEL
 ═══════════════════════════════════════════════ */
@@ -833,7 +754,9 @@ async function loadBadge() {
 ═══════════════════════════════════════════════ */
 async function creerDemande() {
   const errs = [];
-  if (!selClient)                                          errs.push("Client manquant");
+  const clientNom = document.getElementById('f-client-nom').value.trim();
+  if (!clientNom) errs.push("Nom du client manquant");
+  if (clientNom) selClient = { Title: clientNom };
   if (!document.getElementById('f-employe').value.trim()) errs.push("Employé manquant");
   if (!document.getElementById('f-date').value)           errs.push("Date manquante");
   if (!document.getElementById('f-vendeur').value)        errs.push("Vendeur manquant");
@@ -907,7 +830,7 @@ async function creerDemande() {
 ═══════════════════════════════════════════════ */
 function saveDraft() {
   const draft = {
-    client:  selClient,
+    clientNom: document.getElementById('f-client-nom').value,
     employe: document.getElementById('f-employe').value,
     chef:    document.getElementById('f-chef').value,
     date:    document.getElementById('f-date').value,
@@ -923,7 +846,7 @@ function saveDraft() {
 }
 
 function resetForm() {
-  ['f-employe','f-chef','f-devis','f-bl-num','f-montant','f-email','f-notes'].forEach(id => {
+  ['f-client-nom','f-employe','f-chef','f-devis','f-bl-num','f-montant','f-email','f-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f-file-bl').value = '';
@@ -934,7 +857,9 @@ function resetForm() {
     `<div class="upload-icon">📋</div><div class="upload-text-main" style="font-size:12px">Glisser ou <strong>parcourir</strong></div><div class="upload-text-sub">PDF · JPG · PNG</div>`;
   const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   document.getElementById('f-date').value = now.toISOString().slice(0,16);
-  resetClient();
+  selClient = null;
+  document.getElementById('r-client').innerHTML = '<div class="no-client-msg">Saisir le nom du client</div>';
+  document.getElementById('r-history').innerHTML = '<div class="no-client-msg">—</div>';
   livePreview();
 }
 
