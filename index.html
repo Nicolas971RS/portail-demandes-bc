@@ -578,6 +578,11 @@ async function spGet(path) {
     headers:{ Authorization:`Bearer ${token}`, Accept:"application/json;odata=verbose" }
   });
   if (!r.ok) throw new Error(`GET ${r.status}`);
+  const ct = r.headers.get('Content-Type') || '';
+  if (!ct.includes('json')) {
+    const txt = await r.text();
+    throw new Error(`Réponse non-JSON (${ct}): ${txt.slice(0,80)}`);
+  }
   return r.json();
 }
 
@@ -818,7 +823,7 @@ async function creerDemande() {
     }
     // Récupérer l'ID via GET filtré sur le titre qu'on vient de créer
     const enc  = encodeURIComponent(title);
-    const getR = await spGet(`web/lists/getbytitle('Demandes_BC')/items?\=Title eq '${enc}'&\=Id&\=Id desc&\=1`);
+    const getR = await spGet(`web/lists/getbytitle('Demandes_BC')/items?$filter=Title eq '${enc}'&$select=Id&$orderby=Id desc&$top=1`);
     const itemId = getR.d?.results?.[0]?.Id ?? getR.value?.[0]?.Id ?? null;
     if (!itemId) throw new Error("Item créé mais ID introuvable — vérifier SharePoint");
 
