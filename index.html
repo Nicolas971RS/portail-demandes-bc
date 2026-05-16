@@ -288,7 +288,7 @@ textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
               </div>
               <div class="form-group">
                 <label>Email client<span class="req">*</span></label>
-                <input type="email" id="f-email" placeholder="contact@client.com">
+                <input type="email" id="f-email" placeholder="contact@client.com" oninput="refreshClientPanel()">
               </div>
             </div>
           </div>
@@ -598,8 +598,8 @@ async function spPost(path, body) {
     method:"POST",
     headers:{
       Authorization:`Bearer ${token}`,
-      Accept:"application/json;odata=verbose",
-      "Content-Type":"application/json;odata=verbose",
+      Accept:"application/json;odata=nometadata",
+      "Content-Type":"application/json;odata=nometadata",
       "X-RequestDigest":digest
     },
     body: JSON.stringify(body)
@@ -624,15 +624,21 @@ async function spAttach(list, itemId, fileName, data) {
 ═══════════════════════════════════════════════ */
 function onClientNomChange(val) {
   selClient = val.trim() ? { Title: val.trim() } : null;
-  // Panneau droit : mini récap
-  const el = document.getElementById('r-client');
-  if (val.trim()) {
-    el.innerHTML = `<div class="info-row"><span class="info-lbl">Nom</span><span class="info-val"><strong>${val.trim()}</strong></span></div>
-      <div class="info-row"><span class="info-lbl">Email</span><span class="info-val">${document.getElementById('f-email').value||'—'}</span></div>`;
-    loadClientHistory(val.trim());
+  refreshClientPanel();
+  if (val.trim()) loadClientHistory(val.trim());
+  else document.getElementById('r-history').innerHTML = '<div class="no-client-msg">—</div>';
+}
+
+function refreshClientPanel() {
+  const nom   = document.getElementById('f-client-nom').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const el    = document.getElementById('r-client');
+  if (nom) {
+    el.innerHTML = `
+      <div class="info-row"><span class="info-lbl">Nom</span><span class="info-val"><strong>${nom}</strong></span></div>
+      <div class="info-row"><span class="info-lbl">Email</span><span class="info-val">${email||'—'}</span></div>`;
   } else {
     el.innerHTML = '<div class="no-client-msg">Saisir le nom du client</div>';
-    document.getElementById('r-history').innerHTML = '<div class="no-client-msg">—</div>';
   }
 }
 
@@ -779,7 +785,6 @@ async function creerDemande() {
     const title     = `DBC-${dateStr}-${clientRef}`;
 
     const body = {
-      "__metadata":             { type:"SP.Data.Demandes_BCListItem" },
       "Title":                  title,
       "NomClient":              selClient.Title,
       "Nom_Employ_x00e9_":      document.getElementById('f-employe').value.trim(),
@@ -796,7 +801,7 @@ async function creerDemande() {
     };
 
     const res    = await spPost(`web/lists/getbytitle('Demandes_BC')/items`, body);
-    const itemId = res.d.Id;
+    const itemId = res.d ? res.d.Id : res.Id; // nometadata = res.Id, verbose = res.d.Id
 
     // Attach BL signé (obligatoire)
     const fileBL = document.getElementById('f-file-bl').files[0];
