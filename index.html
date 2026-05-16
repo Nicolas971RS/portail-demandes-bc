@@ -474,8 +474,9 @@ const CLIENT_ID   = "65b27695-da23-4e18-83a7-8b5678205d12";
 const TENANT_ID   = "d441528b-bc77-4636-8d24-8ac9d38aed63";
 const REDIRECT    = "https://nicolas971rs.github.io/portail-demandes-bc/";
 const SP_SITE     = "https://reseauxplus971.sharepoint.com/sites/BondeCommande";
-// Scope SharePoint — si erreur AADSTS: vérifier les API permissions de l'app Azure AD
-const SP_SCOPE    = `${SP_SITE}/AllSites.Write`;
+
+const SP_ROOT     = "https://reseauxplus971.sharepoint.com";
+const SP_SCOPE    = `${SP_ROOT}/.default`;
 
 // Mapping prénom compte → valeur Choix SharePoint
 const VENDEUR_MAP = { nicolas:"Nicolas", fred:"Fred", frédéric:"Fred", frederic:"Fred", fritz:"Fritz", fabrice:"Fabrice" };
