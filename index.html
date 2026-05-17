@@ -630,7 +630,8 @@ async function spAttach(list, itemId, fileName, data) {
     { method:"POST", headers:{ Authorization:`Bearer ${token}`, "X-RequestDigest":digest }, body:data }
   );
   if (!r.ok) { const t = await r.text(); throw new Error(t); }
-  return r.json();
+  // SP retourne du HTML sur succès — on n'utilise pas le retour, on ignore
+  return;
 }
 
 /* ═══════════════════════════════════════════════
